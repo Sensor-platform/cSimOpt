@@ -27,7 +27,7 @@ pip install -r requirements.txt
 python cSimOpt.py
 ```
 
-The `if __name__ == '__main__':` block at the bottom of `cSimOpt.py` lets you adjust the experiment: surrogate (`gp`/`dpl`), acquisition function (`ei`/`ucb`), `max_cost`, `unit_cost`, and `seed`.
+`if __name__ == '__main__':` block at the bottom of `cSimOpt.py` lets you adjust the experiment: surrogate (`gp`/`dpl`), acquisition function (`ei`/`ucb`), `max_cost`, `unit_cost`, and `seed`.
 
 ## Notes
 
