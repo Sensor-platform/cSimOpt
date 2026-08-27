@@ -1,8 +1,8 @@
 # cSimOpt
 
-cSimOpt jointly searches sensor parameters and ML model hyperparameters by implementing a Multi-Fidelity Bayesian Optimization (MFBO). Fidelity here refers to the amount of data collected (budget/cost) for a given sensor parameter, trading off fast/cheap low-budget evaluations against accurate/expensive high-budget ones.
+cSimOpt jointly optimizes sensor parameters and ML model hyperparameters by implementing a Multi-Fidelity Bayesian Optimization (MFBO). In cSimOpt, a budget refers to the amount of data collected for a given sensor parameter.
 
-It works by iteratively fitting a surrogate model (GP or a DPL learning-curve ensemble) on observed `(configuration, budget) → performance` data, then using an acquisition function (EI or UCB) to pick the next configuration and budget to evaluate in a freeze-thaw manner, until a target performance is reached.
+It works by iteratively fitting a surrogate model (Gaussian Process (GP) or a deep power law (DPL)) on an observed set that consist of `(configuration, budget, performance)`, then using an acquisition function (expected improvement (EI) or upper confidence bound (UCB)) to pick the next configuration and budget to evaluate in a freeze-thaw manner, until a target performance is reached.
 
 ## Files
 
