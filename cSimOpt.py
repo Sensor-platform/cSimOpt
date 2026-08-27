@@ -1,3 +1,5 @@
+# Copyright © UIF (University Industry Foundation), Yonsei University. All rights reserved. For any inquiries regarding the usage or licensing of this code, please contact the UIF. (Contact: +82-2-2123-5176 / jemin17@yonsei.ac.kr)
+
 import os
 import numpy as np
 import datetime
