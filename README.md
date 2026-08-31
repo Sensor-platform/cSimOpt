@@ -9,14 +9,14 @@ It works by iteratively fitting a surrogate model (Gaussian Process (GP) or a de
 | File | Description |
 |---|---|
 | `cSimOpt.py` | Main script to execute cSimOpt (`BayesianOptimizerMF`) |
-| `dpl_surrogate.py` | `DPL` (Deep Power Law) surrogate model, based on the architecture from Kadra et al. [1]. Approximates a power-law function based on given configurations and budgets |
-| `sensor_performance.npy` | Pre-computed look-up table. Shape `(9000, 10)` — 9000 is the number of configurations (3×5×4×5×5×6), 10 is the budget level (500, 1000, ..., 4500, 5000). Performance values are obtained using the radar sensing setting from Kim and Kim [2] |
+| `dpl_surrogate.py` | `DPL` (Deep Power Law) surrogate model, based on the architecture from Kadra et al. [1]. It approximates a power-law function based on given configurations and budgets |
+| `sensor_performance.npy` | Pre-computed look-up table. Shape `(9000, 10)` — 9000 is the number of configurations (3×5×4×5×5×6), 10 is the budget level (1000, 2000, 3000, 4000, 5000). Performance values are obtained using the radar sensing setting from Kim and Kim [2] |
 | `requirements.txt` | Python package dependencies |
 
 ## Search space of configurations
 
-- **Sensor parameters**: step size `[1,2,3]`, start point `[1,2,3,4,5]`, number of points `[1,2,3,4]`
-- **Hyperparameters**: number of units in 1st/2nd hidden layer `[1..5]`, learning rate `[1..6]`
+- **Sensor parameters**: step size `[1,2,3]`, start point `[1,2,3,4,5]`, number of points `[1,2,3,4]` (Scaled values)
+- **Hyperparameters**: number of units in 1st/2nd hidden layer `[1,2,3,4,5]`, learning rate `[1,2,3,4,5,6]` (Scaled values)
 
 Each combination is encoded as an integer index (0~8999) and used to look up the performance in `sensor_performance.npy`.
 
