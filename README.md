@@ -10,7 +10,7 @@ It works by iteratively fitting a surrogate model (Gaussian Process (GP) or a de
 |---|---|
 | `cSimOpt.py` | Main script to execute cSimOpt (`BayesianOptimizerMF`) |
 | `dpl_surrogate.py` | `DPL` (Deep Power Law) surrogate model, based on the architecture from Kadra et al. [1]. It approximates a power-law function based on given configurations and budgets |
-| `sensor_performance.npy` | Pre-computed look-up table. Shape `(9000, 10)` — 9000 is the number of configurations (3×5×4×5×5×6), 10 is the budget level (1000, 2000, 3000, 4000, 5000). Performance values are obtained using the radar sensing setting from Kim and Kim [2] |
+| `sensor_performance.npy` | Pre-computed look-up table. Shape `(9000, 5)` — 9000 is the number of configurations (3×5×4×5×5×6), 5 is the budget level (1000, 2000, 3000, 4000, 5000). Performance values are obtained using the radar sensing setting from Kim and Kim [2] |
 | `requirements.txt` | Python package dependencies |
 
 ## Search space of configurations
