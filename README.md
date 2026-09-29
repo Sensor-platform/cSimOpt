@@ -10,10 +10,7 @@ It works by iteratively fitting a surrogate model (Gaussian Process (GP) or a de
 |---|---|
 | `cSimOpt.py` | Main script to execute cSimOpt (`BayesianOptimizerMF`) |
 | `dpl_surrogate.py` | `DPL` (Deep Power Law) surrogate model, based on the architecture from Kadra et al. [1]. It approximates a power-law function based on given configurations and budgets |
-<<<<<<< HEAD
-=======
 | `scores_performance.npy` | Pre-computed look-up table. Shape `(9000, 5)` — 9000 is the number of configurations (3×5×4×5×5×6), 5 is the budget level (1000, 2000, 3000, 4000, 5000). Performance values are obtained using the radar sensing setting from Kim and Kim [2]. |
->>>>>>> f5cfa24 (Update files)
 | `requirements.txt` | Python package dependencies |
 
 ## Search space of configurations
@@ -38,9 +35,9 @@ python cSimOpt.py
 
 ## References
 
-[1] Kadra, Arlind, et al. "Scaling laws for hyperparameter optimization." *Advances in Neural Information Processing Systems* 36 (2023): 47527-47553.
+[1] A. Kadra *et al.,* "Scaling laws for hyperparameter optimization," in *Advances in neural information processing systems* 36, 2023, pp. 47527-47553.
 
-[2] S. Kim and J. Kim, "Parameter Optimization Framework for Enhancing Radar-Based Material Recognition," in *IEEE Sensors Journal*, vol. 24, no. 24, pp. 42219-42229, 15 Dec. 2024.
+[2] S. Kim and J. Kim, "Parameter Optimization Framework for Enhancing Radar-Based Material Recognition," *IEEE Sensors J.*, vol. 24, no. 24, pp. 42219-42229, Dec. 2024.
 
 ## License & Inqueries
 
