@@ -19,15 +19,6 @@ import random
 import copy
 
 
-def config_to_sample(config, dims): # Configuration index into 6-dimension configuration
-    sample = np.ones((len(config),6))
-    config_copy = copy.deepcopy(config)
-    for i in range(len(dims)):
-        divider = int(np.prod(dims[i+1:len(dims)], dtype=np.int64))
-        sample[:,i] = config_copy // divider
-        config_copy -= (config_copy // divider) * divider
-    return sample
-
 def sensor_parameter_decoder(step_size, start_point, num_points): # Re-scaling sensor parameters
     """
     Decoding sensor parameters into real values
@@ -46,7 +37,6 @@ def sensor_parameter_decoder(step_size, start_point, num_points): # Re-scaling s
         num_points = int(6 + ((num_points - 1) * 2))
 
     return step_size, start_point, num_points
-
 
 
 def layer_decoder(layer): # Re-scaling # of units in hidden layers
@@ -72,7 +62,7 @@ def objective_function(x_idx, cost, sensor_scores): # Load the prediction accura
 dims = [3,5,4,5,5,6] # Dimension of each configuration
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SENSOR_SCORES_PATH = os.path.join(BASE_DIR, "sensor_performance.npy")
+SENSOR_SCORES_PATH = os.path.join(BASE_DIR, "scores_performance.npy")
 sensor_scores = np.load(SENSOR_SCORES_PATH)
 
 # Define a surrogate model as a DPL
@@ -102,24 +92,17 @@ class DPLEnsemble:
             Y: np.ndarray
                 Performane. (num_samples,)
         """
-        ## Fix seeds
         np.random.seed(self.seed)
         tf.random.set_seed(self.seed)
-        ## Fix seeds
+
+        inputs = np.hstack((X[:,:-1].reshape(-1,6), X[:,-1:]/max_cost)) # Configuration + normalized cost
         self.models = []
         for _ in range(self.num_models):
             model = DPL()
             model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
                           loss=tf.keras.losses.MeanAbsoluteError()) # Adam optimizer, MAE loss
             model.build(input_shape=(1, self.num_features+1)) # parameters and cost
-
-            model.fit(
-                x=np.hstack((X[:,:-1].reshape(-1,6), X[:,-1].reshape(-1,1)/max_cost)),
-                y=Y,
-                epochs=num_epochs,
-                verbose=0
-            ) # Train DPL
-
+            model.fit(x=inputs, y=Y, epochs=num_epochs, verbose=0) # Train DPL
             self.models.append(model)
     
     def predict(self, x, cost=1):
@@ -135,18 +118,11 @@ class DPLEnsemble:
             sigma: float
                 Standard deviation of the performance.
         """
-        all_predictions = []
-        inputs = np.hstack((x.reshape(-1,6), np.repeat(np.array([cost]), repeats = x.reshape(-1,6).shape[0], axis = 0).reshape(-1,1))) # Configuration + dataset size
-        inputs = inputs.astype(np.float32)
-        for model in self.models:
-            predictions = model.predict(inputs, verbose=0)
-            predictions = np.array(predictions)
-            all_predictions.append(predictions) # Predictions of all neural networks in an ensemble
+        x = x.reshape(-1,6)
+        inputs = np.hstack((x, np.full((len(x),1), cost))).astype(np.float32) # Configuration + dataset size
+        all_predictions = [model.predict(inputs, verbose=0) for model in self.models] # Predictions of all neural networks in an ensemble
 
-        mu = np.mean(all_predictions, axis=0) # Mean prediction
-        sigma = np.std(all_predictions, axis=0) # Std prediction
-
-        return mu, sigma
+        return np.mean(all_predictions, axis=0), np.std(all_predictions, axis=0) # Mean and std prediction
 
 class BayesianOptimizerMF:
     def __init__(self, bounds, surrogate='gp', acq='ucb', n_initial_points=1, kappa=2.5, max_cost=5000, unit_cost=1000, seed=0):
@@ -154,7 +130,7 @@ class BayesianOptimizerMF:
         self.n_initial_points = n_initial_points
         self.surrogate_model = DPLEnsemble(len(self.bounds), seed = seed) # DPL surrogate model
         self.gp = GaussianProcessRegressor(kernel=Matern(nu=2.5), alpha=1e-4) # GP surrogate model
-        self.X_sample = np.array([]).reshape(-1, len(self.bounds)+1) # (num_samples, num_features+1) The last feature represents a cost
+        self.X_sample = np.empty((0, len(self.bounds)+1)) # (num_samples, num_features+1) The last feature represents a cost
         self.Y_sample = np.array([])
 
         self.surrogate = surrogate
@@ -168,6 +144,7 @@ class BayesianOptimizerMF:
         self.cost_sensor = dict() # Amount of collected data for each 'sensor' parameter configuration
         
         self.best_value = 0 # Best observed performance to calculate EI
+        self.tau = 0.9658 # Terminal condition
         
         self.seed = seed # Fix seeds
 
@@ -180,6 +157,14 @@ class BayesianOptimizerMF:
         self.measurement = list() # Measurements for save
 
         self.count = dict() # Total count of selected points
+
+        self.sp_1 = [1,2,3]
+        self.sp_2 = [1,2,3,4,5]
+        self.sp_3 = [1,2,3,4]
+        self.hp_1 = [1,2,3,4,5]
+        self.hp_2 = [1,2,3,4,5]
+        self.hp_3 = [1,2,3,4,5,6]
+        self.candidates = np.array([list(p) for p in product(self.sp_1, self.sp_2, self.sp_3, self.hp_1, self.hp_2, self.hp_3)])
     
     def _acquisition(self, x):
         """ Expected improvement at fidelity level of maximum cost (self.max_cost)
@@ -188,26 +173,22 @@ class BayesianOptimizerMF:
                 Parameter configurations.
         """
 
-        ## Fix seeds
         np.random.seed(self.seed)
         tf.random.set_seed(self.seed)
-        ## Fix seeds
 
-        best_value = np.max(-self.Y_sample) # Calculate the best observed value
-        # Calculate the mean and standard deviation of the performance of x at c_max
-        if self.surrogate == 'gp': # GP surrogate model
-            budgets = np.ones((x.shape[0],1))
-            x = np.concatenate((x, budgets), axis = 1)
-            mu, sigma = self.gp.predict(x, return_std=True)
-        elif self.surrogate == 'dpl': # DPL surrogate model
+        best_value = np.max(-self.Y_sample) # Best observed value
+        # Mean and std of the performance of x at c_max
+        if self.surrogate == 'gp':
+            mu, sigma = self.gp.predict(np.hstack([x, np.ones((len(x), 1))]), return_std=True)
+        elif self.surrogate == 'dpl':
             mu, sigma = self.surrogate_model.predict(x, 1)
 
         if self.acq == 'ei':
-            mu = -mu # Negate mean to make it real performance
-            z = (mu - best_value) / sigma
-            return (mu-best_value) * norm.cdf(z) + sigma * norm.pdf(z) # Expected improvement
+            imp = -mu - best_value # Negated mean is the real performance
+            z = imp / sigma
+            return imp * norm.cdf(z) + sigma * norm.pdf(z) # Expected improvement
         elif self.acq == 'ucb':
-            return -(mu - self.kappa * sigma) # Upper confidence bound
+            return self.kappa * sigma - mu # Upper confidence bound
 
 
     def optimize(self, total_amount=120000):
@@ -227,142 +208,61 @@ class BayesianOptimizerMF:
         print(f"[Start Experiment] {experiment_name}")
         
         # Random points
-        sp_1 = [1,2,3]
-        sp_2 = [1,2,3,4,5]
-        sp_3 = [1,2,3,4]
-        hp_1 = [1,2,3,4,5]
-        hp_2 = [1,2,3,4,5]
-        hp_3 = [1,2,3,4,5,6]
-
-        param_lists = [sp_1, sp_2, sp_3, hp_1, hp_2, hp_3]
+        param_lists = [self.sp_1, self.sp_2, self.sp_3, self.hp_1, self.hp_2, self.hp_3]
         
-        n_samples = self.n_initial_points
-        chosen = set()
-        results = []
-
-        random_seed = self.seed
-        while len(results) < n_samples:
-            random_seed += 1
-            random.seed(random_seed)
-            # Select each configuration at random
-            sample = tuple(random.choice(plist) for plist in param_lists)
-            if sample not in chosen:
-                chosen.add(sample)
-                results.append(sample)
+        # Sample n_initial_points unique configurations without replacement
+        results = random.Random(self.seed).sample(list(product(*param_lists)), self.n_initial_points)
         # Random points
 
         iterations = 0
-        current_objective = -0.1
-        while current_objective >= -0.9658:
+        current_objective = 0.1
+        current_objective_max = 0.1
+        while (current_objective <= self.tau) or (current_objective_max != current_objective):
             if iterations < self.n_initial_points:
-                x_random_int = np.array(results[iterations]) # Random points
-                
-                # Total count of selected points
-                if tuple(x_random_int) not in self.count.keys():
-                    self.count[tuple(x_random_int)] = 1
-                else:
-                    self.count[tuple(x_random_int)] += 1
-                # Total count of selected points
-
-                # Update the cost (amount of data) for the selected sensor parameter and hyperparameter configurations
-                if tuple(x_random_int[:3]) not in self.cost_sensor: # Case when b(theta_s)==0
-                    self.cost[tuple(x_random_int)] = self.unit_cost
-                    self.total_collected_data += self.unit_cost
-                    self.cost_sensor[tuple(x_random_int[:3])] = self.cost[tuple(x_random_int)]
-                else: # Case when b(theta_s)>0
-                    if tuple(x_random_int) not in self.cost: # Case when c(theta_s, theta_h)==0
-                        self.cost[tuple(x_random_int)] = self.cost_sensor[tuple(x_random_int[:3])]
-                    else: # Case when c(theta_s, theta_h)>0
-                        if self.cost[tuple(x_random_int)] < self.cost_sensor[tuple(x_random_int[:3])]:
-                            self.cost[tuple(x_random_int)] = self.cost_sensor[tuple(x_random_int[:3])]
-                        else:
-                            self.cost[tuple(x_random_int)] += self.unit_cost
-                            if self.cost[tuple(x_random_int)] > self.max_cost:
-                                self.cost[tuple(x_random_int)] = self.max_cost
-                            self.total_collected_data += self.cost[tuple(x_random_int)] - self.cost_sensor[tuple(x_random_int[:3])]
-                            self.cost_sensor[tuple(x_random_int[:3])] = self.cost[tuple(x_random_int)]
-                
-                self.X_sample = np.vstack((self.X_sample, np.hstack((x_random_int, np.array([self.cost[tuple(x_random_int)]])))))
-                current_sample = x_random_int
-
-                # Configuration index (0~8999)
-                config = (current_sample[0] - 1) * np.prod(dims[1:len(dims)]) + (current_sample[1] - 1) * np.prod(dims[2:len(dims)]) + (current_sample[2] - 1) * np.prod(dims[3:len(dims)]) + (current_sample[3] - 1) * np.prod(dims[4:len(dims)]) + (current_sample[4] -1) * np.prod(dims[5:len(dims)]) + current_sample[5] - 1
-                y_random = objective_function(config, self.cost[tuple(x_random_int)], sensor_scores) # ML performance of a configuration
-                self.Y_sample = np.append(self.Y_sample, -y_random)
-                current_objective = -y_random
-                self.total_evaluated_data += self.cost[tuple(x_random_int)] # Evaluated data
-                
-                self.total_collected_potential_data = self.total_collected_data + self.max_cost - self.cost[tuple(x_random_int)]
-
-                y_random_potential = objective_function(config, self.max_cost, sensor_scores) # total maximum amount of collected data
-                self.measurement = np.hstack((np.array(self.measurement).reshape(6,-1),
-                                              np.array([config, y_random, y_random_potential, self.total_collected_data, self.total_evaluated_data, self.total_collected_potential_data]).reshape(6,1)))
-                # Configuration index (1st row), ML performance at given budget (2nd row), ML performance at maximum budget (3rd row), total amount of collected data (4th row), total amount of evaluated data (5th row), total maximum amount of collected data (6th row)
+                x = np.array(results[iterations]) # Random points
             else:
-                sp_1 = [1,2,3]
-                sp_2 = [1,2,3,4,5]
-                sp_3 = [1,2,3,4]
-                hp_1 = [1,2,3,4,5]
-                hp_2 = [1,2,3,4,5]
-                hp_3 = [1,2,3,4,5,6]
-                candidates = np.array([list(p) for p in product(sp_1, sp_2, sp_3, hp_1, hp_2, hp_3)])
-
                 exclude = [k for k, v in self.count.items() if v == int(self.max_cost / self.unit_cost)] # Exclude the configuration whose ML performance is evaluated at the maximum budget
                 exclude = np.array([list(t) for t in exclude])
-                candidates = candidates[~np.any([np.all(candidates == b, axis=1) for b in exclude], axis=0)]
-                candidates = candidates.reshape(-1,6)
-                x_next_int = candidates[np.argmin(- self._acquisition(candidates))] # Select next configuration
-                
-                # Update the cost (amount of data) for the selected sensor parameter and hyperparameter configurations
-                if tuple(x_next_int[:3]) not in self.cost_sensor: # Case when b(theta_s)==0
-                    self.cost[tuple(x_next_int)] = self.unit_cost
-                    self.total_collected_data += self.unit_cost
-                    self.cost_sensor[tuple(x_next_int[:3])] = self.cost[tuple(x_next_int)]
-                else: # Case when b(theta_s)>0
-                    if tuple(x_next_int) not in self.cost: # Case when c(theta_s, theta_h)==0
-                        self.cost[tuple(x_next_int)] = self.cost_sensor[tuple(x_next_int[:3])]
-                    else: # Case when c(theta_s, theta_h)>0
-                        if self.cost[tuple(x_next_int)] < self.cost_sensor[tuple(x_next_int[:3])]:
-                            self.cost[tuple(x_next_int)] = self.cost_sensor[tuple(x_next_int[:3])]
-                        else:
-                            self.cost[tuple(x_next_int)] += self.unit_cost
-                            if self.cost[tuple(x_next_int)] > self.max_cost:
-                                self.cost[tuple(x_next_int)] = self.max_cost
-                            self.total_collected_data += self.cost[tuple(x_next_int)] - self.cost_sensor[tuple(x_next_int[:3])]
-                            self.cost_sensor[tuple(x_next_int[:3])] = self.cost[tuple(x_next_int)]
+                self.candidates = self.candidates[~np.any([np.all(self.candidates == b, axis=1) for b in exclude], axis=0)]
+                self.candidates = self.candidates.reshape(-1,6)
+                x = self.candidates[np.argmin(- self._acquisition(self.candidates))] # Select next configuration
 
-                # Total count of selected points
-                if tuple(x_next_int[:3]) not in self.cost_sensor:
-                    self.count[tuple(x_next_int)] = 1
-                else:
-                    self.count[tuple(x_next_int)] = int(self.cost_sensor[tuple(x_next_int[:3])] / self.unit_cost)
-                # Total count of selected points
-                
-                self.X_sample = np.vstack((self.X_sample, np.hstack((x_next_int, np.array([self.cost[tuple(x_next_int)]])))))
-                current_sample = x_next_int
-                
+            key, s_key = tuple(x), tuple(x[:3])
 
-                # Configuration index (0~8999)
-                config = (current_sample[0] - 1) * np.prod(dims[1:len(dims)]) + (current_sample[1] - 1) * np.prod(dims[2:len(dims)]) + (current_sample[2] - 1) * np.prod(dims[3:len(dims)]) + (current_sample[3] - 1) * np.prod(dims[4:len(dims)]) + (current_sample[4] -1) * np.prod(dims[5:len(dims)]) + current_sample[5] - 1
-                y_next = objective_function(config, self.cost[tuple(x_next_int)], sensor_scores) # ML performance of a configuration
-                self.Y_sample = np.append(self.Y_sample, -y_next)
-                current_objective = -y_next
-                self.total_evaluated_data += self.cost[tuple(x_next_int)] # Evaluated data
-                
-                self.total_collected_potential_data = self.total_collected_data + self.max_cost - self.cost[tuple(x_next_int)] # total maximum amount of collected data
+            # Update the cost (amount of data) for the selected sensor parameter and hyperparameter configurations
+            if s_key not in self.cost_sensor: # Case when b(theta_s)==0
+                self.cost[key] = self.cost_sensor[s_key] = self.unit_cost
+                self.total_collected_data += self.unit_cost
+            elif self.cost.get(key, 0) < self.cost_sensor[s_key]: # Case when c(theta_s, theta_h) < b(theta_s), including c==0
+                self.cost[key] = self.cost_sensor[s_key]
+            else: # Case when c(theta_s, theta_h) == b(theta_s): collect one more unit
+                self.cost[key] = min(self.cost[key] + self.unit_cost, self.max_cost)
+                self.total_collected_data += self.cost[key] - self.cost_sensor[s_key]
+                self.cost_sensor[s_key] = self.cost[key]
 
+            # Total count of selected points
+            self.count[key] = int(self.cost_sensor[s_key] / self.unit_cost)
 
-                y_next_potential = objective_function(config, self.max_cost, sensor_scores) # total maximum amount of collected data
-                self.measurement = np.hstack((np.array(self.measurement).reshape(6,-1),
-                                              np.array([config, y_next, y_next_potential, self.total_collected_data, self.total_evaluated_data, self.total_collected_potential_data]).reshape(6,1)))
-                # Configuration index (1st row), ML performance at given budget (2nd row), ML performance at maximum budget (3rd row), total amount of collected data (4th row), total amount of evaluated data (5th row), total maximum amount of collected data (6th row)
-                
-                
-            print(f"[Iteration {iterations}] Score: {-current_objective:.4f}, Params: {current_sample}")
+            cost = self.cost[key]
+            self.X_sample = np.vstack((self.X_sample, np.append(x, cost)))
+            current_sample = x
+
+            config = np.ravel_multi_index(np.asarray(x, dtype=int) - 1, dims) # Configuration index (0~8999)
+            current_objective = objective_function(config, cost, sensor_scores) # ML performance of a configuration
+            current_objective_max = objective_function(config, self.max_cost, sensor_scores) # ML performance at maximum budget
+            self.Y_sample = np.append(self.Y_sample, -current_objective)
+            self.total_evaluated_data += cost # Evaluated data
+            self.total_collected_potential_data = self.total_collected_data + self.max_cost - cost # total maximum amount of collected data
+
+            # Configuration index (1st row), ML performance at given budget (2nd row), ML performance at maximum budget (3rd row), total amount of collected data (4th row), total amount of evaluated data (5th row), total maximum amount of collected data (6th row)
+            self.measurement = np.hstack((np.array(self.measurement).reshape(6,-1),
+                                          np.array([config, current_objective, current_objective_max, self.total_collected_data, self.total_evaluated_data, self.total_collected_potential_data]).reshape(6,1)))
+
+            print(f"[Iteration {iterations}] Score: {current_objective:.4f}, Data size: {cost}, Params: {current_sample}")
 
             if iterations >= self.n_initial_points-1:
                 if self.surrogate == 'gp': # GP surrogate model
-                    self.gp.fit(np.hstack((self.X_sample[:,:-1].reshape(-1,6), self.X_sample[:,-1].reshape(-1,1)/self.max_cost)), self.Y_sample)
+                    self.gp.fit(np.hstack((self.X_sample[:, :-1], self.X_sample[:, -1:] / self.max_cost)), self.Y_sample) # Normalize cost to [0, 1]
                 elif self.surrogate == 'dpl': # DPL surrogate model
                     self.surrogate_model.fit(self.X_sample, self.Y_sample, max_cost=self.max_cost)
             
