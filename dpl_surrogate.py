@@ -15,15 +15,12 @@ class DPL(Model):
         super(DPL, self).__init__()
         self.act_func = layers.LeakyReLU()
         self.last_act_func = GLU()
-        
+
         self.hidden_layers = []
-        self.hidden_layers.append(layers.Dense(nr_units))
-        self.hidden_layers.append(self.act_func)
-        for _ in range(2, nr_layers + 1):
-            self.hidden_layers.append(layers.Dense(nr_units))
-            self.hidden_layers.append(self.act_func)
+        for _ in range(nr_layers + 1):
+            self.hidden_layers += [layers.Dense(nr_units), self.act_func]
         self.last_layer = layers.Dense(3)
-    
+
     def call(self, inputs):
         '''
         Args:
@@ -32,14 +29,12 @@ class DPL(Model):
         '''
         x = inputs[:,:-1]
         cost = inputs[:,-1]
-        
+
         for layer in self.hidden_layers:
             x = layer(x)
         x = self.last_layer(x)
 
-        alphas = x[:, 0]
-        betas = x[:, 1]
-        gammas = x[:, 2]
+        alphas, betas, gammas = x[:, 0], x[:, 1], x[:, 2]
 
         betas_cat = tf.stack([betas, betas], axis=-1)
         gammas_cat = tf.stack([gammas, gammas], axis=-1)
