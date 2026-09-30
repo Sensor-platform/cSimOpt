@@ -95,7 +95,7 @@ class DPLEnsemble:
         np.random.seed(self.seed)
         tf.random.set_seed(self.seed)
 
-        inputs = np.hstack((X[:,:-1].reshape(-1,6), X[:,-1:]/max_cost)) # Configuration + normalized cost
+        inputs = np.hstack((X[:,:-1].reshape(-1,self.num_features), X[:,-1:]/max_cost)) # Configuration + normalized cost
         self.models = []
         for _ in range(self.num_models):
             model = DPL()
@@ -109,7 +109,7 @@ class DPLEnsemble:
         """ Predict the performance of a given input at a given cost.
         Args:
             x: np.ndarray
-                Parameter configurations with size (8,).
+                Parameter configurations with size (num_features,).
             cost: float
                 Normalized cost to predict the performance.
         Returns:
@@ -118,7 +118,7 @@ class DPLEnsemble:
             sigma: float
                 Standard deviation of the performance.
         """
-        x = x.reshape(-1,6)
+        x = x.reshape(-1,self.num_features)
         inputs = np.hstack((x, np.full((len(x),1), cost))).astype(np.float32) # Configuration + dataset size
         all_predictions = [model.predict(inputs, verbose=0) for model in self.models] # Predictions of all neural networks in an ensemble
 
