@@ -109,7 +109,7 @@ class DPLEnsemble:
         """ Predict the performance of a given input at a given cost.
         Args:
             x: np.ndarray
-                Parameter configurations with size (8,).
+                Parameter configurations with size (6,).
             cost: float
                 Normalized cost to predict the performance.
         Returns:
