@@ -35,9 +35,9 @@ python cSimOpt.py
 
 ## References
 
-[1] A. Kadra *et al.,* "Scaling laws for hyperparameter optimization," in *Advances in neural information processing systems* 36, 2023, pp. 47527-47553.
+[1] A. Kadra, M. Janowski, M. Wistuba, and J. Grabocka, "Scaling laws for hyperparameter optimization," in *Proc. NeurIPS*, New Orleans, LA, USA, 2023, pp. 1–14.
 
-[2] S. Kim and J. Kim, "Parameter Optimization Framework for Enhancing Radar-Based Material Recognition," *IEEE Sensors J.*, vol. 24, no. 24, pp. 42219-42229, Dec. 2024.
+[2] S. Kim and J. Kim, "Parameter optimization framework for enhancing radar-based material recognition," *IEEE Sensors J.*, vol. 24, no. 24, pp. 42219-42229, Dec. 2024.
 
 ## License & Inqueries
 
