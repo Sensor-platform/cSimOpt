@@ -11,13 +11,13 @@ class GLU(layers.Layer):
 
 # DPL
 class DPL(Model):
-    def __init__(self, nr_units=50, nr_layers=3):
+    def __init__(self, nr_units=50, nr_layers=2):
         super(DPL, self).__init__()
         self.act_func = layers.LeakyReLU()
         self.last_act_func = GLU()
 
         self.hidden_layers = []
-        for _ in range(nr_layers + 1):
+        for _ in range(nr_layers):
             self.hidden_layers += [layers.Dense(nr_units), self.act_func]
         self.last_layer = layers.Dense(3)
 
