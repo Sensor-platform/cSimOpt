@@ -125,7 +125,7 @@ class DPLEnsemble:
         return np.mean(all_predictions, axis=0), np.std(all_predictions, axis=0) # Mean and std prediction
 
 class BayesianOptimizerMF:
-    def __init__(self, bounds, surrogate='gp', acq='ucb', n_initial_points=1, kappa=2.5, max_cost=5000, unit_cost=1000, seed=0):
+    def __init__(self, bounds, surrogate='gp', acq='ei', n_initial_points=1, kappa=2.5, max_cost=5000, unit_cost=1000, seed=0):
         self.bounds = bounds
         self.n_initial_points = n_initial_points
         self.surrogate_model = DPLEnsemble(len(self.bounds), seed = seed) # DPL surrogate model
@@ -176,7 +176,7 @@ class BayesianOptimizerMF:
         np.random.seed(self.seed)
         tf.random.set_seed(self.seed)
 
-        best_value = np.max(-self.Y_sample) # Best observed value
+        best_value = np.max(self.Y_sample) # Best observed value
         # Mean and std of the performance of x at c_max
         if self.surrogate == 'gp':
             mu, sigma = self.gp.predict(np.hstack([x, np.ones((len(x), 1))]), return_std=True)
@@ -184,11 +184,11 @@ class BayesianOptimizerMF:
             mu, sigma = self.surrogate_model.predict(x, 1)
 
         if self.acq == 'ei':
-            imp = -mu - best_value # Negated mean is the real performance
+            imp = mu - best_value # Negated mean is the real performance
             z = imp / sigma
             return imp * norm.cdf(z) + sigma * norm.pdf(z) # Expected improvement
         elif self.acq == 'ucb':
-            return self.kappa * sigma - mu # Upper confidence bound
+            return self.kappa * sigma + mu # Upper confidence bound
 
 
     def optimize(self, total_amount=120000):
@@ -225,7 +225,7 @@ class BayesianOptimizerMF:
                 exclude = np.array([list(t) for t in exclude])
                 self.candidates = self.candidates[~np.any([np.all(self.candidates == b, axis=1) for b in exclude], axis=0)]
                 self.candidates = self.candidates.reshape(-1,6)
-                x = self.candidates[np.argmin(- self._acquisition(self.candidates))] # Select next configuration
+                x = self.candidates[np.argmax(self._acquisition(self.candidates))] # Select next configuration
 
             key, s_key = tuple(x), tuple(x[:3])
 
@@ -250,7 +250,7 @@ class BayesianOptimizerMF:
             config = np.ravel_multi_index(np.asarray(x, dtype=int) - 1, dims) # Configuration index (0~8999)
             current_objective = objective_function(config, cost, sensor_scores) # ML performance of a configuration
             current_objective_max = objective_function(config, self.max_cost, sensor_scores) # ML performance at maximum budget
-            self.Y_sample = np.append(self.Y_sample, -current_objective)
+            self.Y_sample = np.append(self.Y_sample, current_objective)
             self.total_evaluated_data += cost # Evaluated data
             self.total_collected_potential_data = self.total_collected_data + self.max_cost - cost # total maximum amount of collected data
 
@@ -268,7 +268,7 @@ class BayesianOptimizerMF:
             
             iterations += 1
 
-        best_idx = np.argmin(self.Y_sample)
+        best_idx = np.argmax(self.Y_sample)
         best_params = self.X_sample[best_idx][:-1] # Slicing to exclude a cost, which is the last column
         
         print("\n[Optimization Finished] Optimal Parameters are")
